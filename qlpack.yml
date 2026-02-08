@@ -1,0 +1,8 @@
+name: lucasamorimca/cosmwasm-codeql
+version: 0.1.0
+library: false
+groups:
+  - "rust"
+dependencies:
+  codeql/rust-all: "*"
+suites: src/queries

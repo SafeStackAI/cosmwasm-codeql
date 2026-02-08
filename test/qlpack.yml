@@ -1,0 +1,6 @@
+name: lucasamorimca/cosmwasm-codeql-tests
+version: 0.1.0
+dependencies:
+  lucasamorimca/cosmwasm-codeql: "*"
+extractor: rust
+tests: .

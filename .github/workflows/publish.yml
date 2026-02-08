@@ -1,0 +1,24 @@
+name: Publish CodeQL Pack
+on:
+  release:
+    types: [published]
+
+permissions:
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CodeQL
+        uses: github/codeql-action/init@v3
+
+      - name: Install dependencies
+        run: codeql pack install
+
+      - name: Publish pack
+        run: codeql pack publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,27 @@
+# Copy this workflow to your CosmWasm project's .github/workflows/ directory
+name: CosmWasm Security Scan
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+          packs: lucasamorimca/cosmwasm-codeql@0.1.0
+
+      - name: Perform Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          output: results

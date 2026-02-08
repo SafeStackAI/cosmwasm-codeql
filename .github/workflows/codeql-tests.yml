@@ -1,0 +1,29 @@
+name: CodeQL Tests
+on: [push, pull_request]
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+      - name: Install pack dependencies
+        run: codeql pack install
+      - name: Compile all queries
+        run: codeql query compile src/queries/
+
+  test:
+    runs-on: ubuntu-latest
+    needs: compile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+      - name: Install pack dependencies
+        run: codeql pack install
+      - name: Run test suite
+        run: bash test/run-tests.sh

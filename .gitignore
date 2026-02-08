@@ -1,0 +1,37 @@
+# CodeQL
+.codeql/
+**/codeql-db/
+**/*.testproj
+**/*.actual
+
+# Rust (test fixtures)
+target/
+Cargo.lock
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Environment
+.env*
+!.env.example
+
+# Node (skills tooling)
+node_modules/
+__pycache__/
+
+# Misc
+repomix-output.xml
+.serena/cache
+screenshots/*
+logs.txt
+prompt.md
+ck.md
+
+# Gemini CLI
+.gemini/settings.json
+.claude/settings.bak.json
+test/db/
