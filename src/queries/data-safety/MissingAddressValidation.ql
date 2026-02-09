@@ -40,7 +40,7 @@ where
   not uncheckedCall.getFunction().toString().matches("%unchecked_into%") and
   // Does not also call addr_validate in the same function
   not callsAddrValidate(handler) and
-  not handler.getLocation().getFile().getBaseName().matches("%test%.rs")
+  isUserContractCode(handler.getLocation().getFile())
 select uncheckedCall,
   "Address created with Addr::unchecked() in '" + handler.getName().getText() +
     "' without addr_validate(). Use deps.api.addr_validate() for user-provided addresses."

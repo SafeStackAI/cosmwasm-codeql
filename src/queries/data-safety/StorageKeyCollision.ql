@@ -34,7 +34,7 @@ where
   decl1.getLocation().getFile() = decl2.getLocation().getFile() and
   // Avoid duplicate reports (only report once per pair)
   decl1.getLocation().getStartLine() < decl2.getLocation().getStartLine() and
-  not decl1.getLocation().getFile().getBaseName().matches("%test%.rs")
+  isUserContractCode(decl1.getLocation().getFile())
 select decl1,
   "Storage key " + key + " is also used by another declaration at line " +
     decl2.getLocation().getStartLine().toString() + ". This causes state corruption."

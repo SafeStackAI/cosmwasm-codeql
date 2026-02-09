@@ -3,8 +3,10 @@
 ## Description
 Execute message dispatch patterns that route to state-modifying handlers without authorization checks in the dispatcher or handler create security gaps. Attackers can invoke privileged operations by crafting specific message types.
 
+This query detects match expressions on the ExecuteMsg parameter within execute handlers and reports any branches that do not perform authorization checks before calling the handler function.
+
 ## Recommendation
-Add authorization checks either in the dispatcher before routing or within each privileged handler function. Prefer handler-level checks for clarity.
+Add authorization checks at the execute-handler level (before the match) or at the dispatcher branch level (for each sensitive operation). Handler-level checks are preferred for consistency. Use established auth patterns: `info.sender` comparisons, assert/ensure macros, helper methods (is_admin, can_execute, assert_owner), or dedicated authorization functions.
 
 ## Example
 

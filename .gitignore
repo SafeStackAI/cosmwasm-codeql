@@ -35,3 +35,8 @@ ck.md
 .gemini/settings.json
 .claude/settings.bak.json
 test/db/
+
+# E2E test artifacts
+test/e2e/targets/
+test/e2e/db/
+test/e2e/results/

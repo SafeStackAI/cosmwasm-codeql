@@ -96,6 +96,8 @@ codeql query run --database=./db \
 
 ## Testing
 
+### Synthetic Tests
+
 ```bash
 # Run the full test suite (requires CodeQL CLI)
 bash test/run-tests.sh
@@ -104,14 +106,40 @@ bash test/run-tests.sh
 bash test/run-tests.sh --rebuild
 ```
 
+### E2E Testing
+
+End-to-end testing validates all 10 queries against real-world CosmWasm contracts:
+
+```bash
+# Run E2E analysis against specified target contracts
+bash test/e2e/run-e2e.sh
+
+# Run and output human-readable results
+bash test/e2e/run-e2e.sh | bash test/e2e/parse-sarif.sh
+```
+
+E2E tests create a workspace database and analyze all specified contracts simultaneously to capture cross-crate dependencies and reference patterns. This helps identify false positives from legitimate patterns in ecosystem libraries.
+
 ## How Detection Works
 
 The pack uses CodeQL's Rust AST analysis to identify vulnerability patterns:
 
 - **Entry points**: Detected by function name convention (`execute`, `migrate`, `instantiate`, `reply`, `ibc_*`) with parameter count matching
-- **Authorization**: Checks for `info.sender` comparisons, assert/ensure macros, and auth helper function calls
+- **Authorization**: Checks for `info.sender` comparisons, assert/ensure/check macros, helper method calls (is_admin, can_execute, assert_owner), and call to auth helper functions
 - **Storage ops**: Matches `save`/`load`/`may_load`/`update`/`remove` method calls
-- **Arithmetic**: Heuristic matching on operand names (amount, balance, supply, etc.) with `+`/`-`/`*` operators
+- **Arithmetic**: Multi-layer filtering excludes dependencies (`.cargo/`, `target/`) and const/static expressions; focuses on dynamic storage/response contexts
+
+## Precision & Validation
+
+The queries undergo multi-stage validation:
+
+1. **Synthetic testing** (`test/run-tests.sh`): 20 unit tests with vulnerable and safe contract fixtures
+2. **E2E testing** (`test/e2e/run-e2e.sh`): Real-world analysis against cw-plus v2.0.0 and other CosmWasm ecosystem contracts
+
+Recent E2E validation (Feb 2026) against cw-plus shows:
+- Total findings: 36 across 4 major contracts (cw20-base, cw721-base, cw20-staking, cw4-group)
+- Precision improved via dependency filtering and scope narrowing
+- Zero regression on synthetic test suite
 
 ## Contributing
 

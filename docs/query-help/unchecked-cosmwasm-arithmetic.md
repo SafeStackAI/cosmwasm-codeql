@@ -3,8 +3,12 @@
 ## Description
 Using standard arithmetic operators (+, -, *, /) on CosmWasm integer types (Uint128, Uint256, Uint64) can cause silent overflow/underflow without panicking, leading to incorrect balances and state corruption.
 
+This query focuses on arithmetic operations in storage and response contexts (where user-controlled values are most likely to cause harm). It excludes dependency code, build artifacts, and const/static expressions to reduce false positives.
+
+Note: cosmwasm-std >= 1.0 Uint128 arithmetic operations are safe (panic on overflow), so false positives may occur with recent versions.
+
 ## Recommendation
-Always use checked arithmetic methods (`checked_add`, `checked_sub`, `checked_mul`, `checked_div`) which return errors on overflow/underflow instead of wrapping.
+Always use checked arithmetic methods (`checked_add`, `checked_sub`, `checked_mul`, `checked_div`) which return errors on overflow/underflow instead of wrapping. If using cosmwasm-std >= 1.0, consider suppressing this query for Uint128 with inline comments.
 
 ## Example
 

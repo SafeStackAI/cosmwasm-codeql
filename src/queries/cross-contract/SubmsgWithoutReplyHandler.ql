@@ -18,6 +18,6 @@ where
   hasReplyCallback(submsg) and
   // No reply entry point exists in the codebase
   not exists(ReplyHandler reply) and
-  not submsg.getLocation().getFile().getBaseName().matches("%test%.rs")
+  isUserContractCode(submsg.getLocation().getFile())
 select submsg,
   "SubMsg created with reply callback but contract has no reply() entry point. Reply will be silently dropped."

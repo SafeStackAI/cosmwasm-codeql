@@ -48,6 +48,7 @@ predicate hasAuthorizationCheck(Function f) {
   )
   or
   // Sender used in a method call (assert_eq, ensure_eq, etc.)
+  // Also covers cw-ownable (assert_owner), cw-controllers (is_admin, can_execute)
   exists(MethodCallExpr call |
     call.getEnclosingCallable() = f and
     (
@@ -56,7 +57,12 @@ predicate hasAuthorizationCheck(Function f) {
       call.getIdentifier().toString().matches("%require%") or
       call.getIdentifier().toString().matches("%check%auth%") or
       call.getIdentifier().toString().matches("%verify%owner%") or
-      call.getIdentifier().toString().matches("%only%owner%")
+      call.getIdentifier().toString().matches("%only%owner%") or
+      call.getIdentifier().toString().matches("%is_admin%") or
+      call.getIdentifier().toString().matches("%can_execute%") or
+      call.getIdentifier().toString().matches("%can_modify%") or
+      call.getIdentifier().toString().matches("%check_permission%") or
+      call.getIdentifier().toString().matches("%validate_sender%")
     )
   )
   or
@@ -69,7 +75,7 @@ predicate hasAuthorizationCheck(Function f) {
     err.toString().matches("%Unauthorized%")
   )
   or
-  // Call to auth helper function
+  // Call to auth helper function (free functions and qualified calls)
   exists(CallExpr call |
     call.getEnclosingCallable() = f and
     exists(string name |
@@ -81,7 +87,13 @@ predicate hasAuthorizationCheck(Function f) {
         name.matches("%ensure_admin%") or
         name.matches("%only_admin%") or
         name.matches("%only_owner%") or
-        name.matches("%require_admin%")
+        name.matches("%require_admin%") or
+        name.matches("%is_admin%") or
+        name.matches("%can_execute%") or
+        name.matches("%can_modify%") or
+        name.matches("%check_permission%") or
+        name.matches("%validate_sender%") or
+        name.matches("%assert_admin%")
       )
     )
   )

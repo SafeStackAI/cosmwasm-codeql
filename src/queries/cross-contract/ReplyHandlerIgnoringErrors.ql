@@ -25,6 +25,6 @@ where
   not exists(MatchExpr m |
     m.getEnclosingCallable() = reply
   ) and
-  not reply.getLocation().getFile().getBaseName().matches("%test%.rs")
+  isUserContractCode(reply.getLocation().getFile())
 select reply,
   "Reply handler does not inspect Reply.result. Error cases from SubMsg execution may be silently ignored."

@@ -23,8 +23,11 @@ where
   call.getLocation().getStartLine() <= arm.getLocation().getEndLine() and
   target = call.getStaticTarget() and
   hasStorageWrite(target) and
+  // Check auth in both the handler AND the enclosing execute function
   not hasAuthorizationCheck(target) and
-  not target.getLocation().getFile().getBaseName().matches("%test%.rs")
+  not hasAuthorizationCheck(dispatch.getEnclosingCallable()) and
+  // Exclude dependency, build artifact, and test code
+  isUserContractCode(target.getLocation().getFile())
 select arm,
   "Dispatch arm calls '" + target.getName().getText() +
     "' which modifies state without authorization."

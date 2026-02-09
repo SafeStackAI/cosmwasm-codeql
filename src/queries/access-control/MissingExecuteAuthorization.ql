@@ -29,8 +29,8 @@ where
   not hasAuthorizationCheck(handler) and
   // exclude query-only handlers (no DepsMut)
   not handler instanceof QueryHandler and
-  // exclude Rust test modules (tests.rs, _test.rs patterns)
-  not handler.getLocation().getFile().getBaseName().matches("%test%.rs")
+  // exclude dependency, build artifact, and test code
+  isUserContractCode(handler.getLocation().getFile())
 select handler,
   "Execute handler '" + handler.getName().getText() +
     "' modifies state without authorization check."

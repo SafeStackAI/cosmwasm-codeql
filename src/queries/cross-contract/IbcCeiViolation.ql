@@ -26,7 +26,7 @@ where
         "add_message", "add_messages", "add_submessage", "add_submessages"
       ]
   ) and
-  not ibc.getLocation().getFile().getBaseName().matches("%test%.rs")
+  isUserContractCode(ibc.getLocation().getFile())
 select ibc,
   "IBC handler '" + ibc.getName().getText() +
     "' performs state changes and dispatches messages. Verify CEI pattern compliance to prevent reentrancy."

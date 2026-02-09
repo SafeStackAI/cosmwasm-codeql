@@ -9,13 +9,28 @@ import rust
 import EntryPoints
 
 /**
- * A match expression inside an execute entry point, likely dispatching
- * on ExecuteMsg variants.
+ * A match expression inside an execute entry point that dispatches
+ * on the msg parameter (ExecuteMsg variants).
+ * Requires the scrutinee to reference the msg parameter (last param)
+ * or contain "msg" substring, filtering out non-dispatch matches
+ * (e.g., config state checks, enum lookups).
  */
 class ExecuteDispatch extends MatchExpr {
   ExecuteDispatch() {
     exists(ExecuteHandler handler |
-      this.getEnclosingCallable() = handler
+      this.getEnclosingCallable() = handler and
+      (
+        // Scrutinee directly references the last parameter (msg)
+        this.getScrutinee().toString() =
+          handler.getParam(handler.getNumberOfParams() - 1).getPat().toString()
+        or
+        // Scrutinee contains the param name (field access like msg.action)
+        this.getScrutinee().toString().matches("%" +
+          handler.getParam(handler.getNumberOfParams() - 1).getPat().toString() + "%")
+        or
+        // Fallback: scrutinee contains "msg" (common naming convention)
+        this.getScrutinee().toString().regexpMatch(".*\\bmsg\\b.*")
+      )
     )
   }
 }
