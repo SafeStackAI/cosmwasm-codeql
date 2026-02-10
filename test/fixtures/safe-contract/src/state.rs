@@ -10,3 +10,17 @@ pub const CONFIG: Item<Config> = Item::new("config");
 pub const BALANCES: Map<&Addr, Uint128> = Map::new("bal");
 // Safe: unique storage key (no collision)
 pub const BACKUP: Item<Vec<u8>> = Item::new("backup");
+
+pub struct Proposal {
+    pub status: ProposalStatus,
+    pub title: String,
+}
+
+#[derive(PartialEq)]
+pub enum ProposalStatus {
+    Open,
+    Passed,
+    Rejected,
+}
+
+pub const PROPOSALS: Map<u64, Proposal> = Map::new("proposals");

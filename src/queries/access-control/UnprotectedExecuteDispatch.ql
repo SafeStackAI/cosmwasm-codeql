@@ -23,9 +23,11 @@ where
   call.getLocation().getStartLine() <= arm.getLocation().getEndLine() and
   target = call.getStaticTarget() and
   hasStorageWrite(target) and
-  // Check auth in both the handler AND the enclosing execute function
-  not hasAuthorizationCheck(target) and
+  // Check auth in both the handler AND the enclosing execute function (1-level transitive)
+  not hasAuthorizationCheckTransitive(target) and
   not hasAuthorizationCheck(dispatch.getEnclosingCallable()) and
+  // Exclude self-serve handlers (sender operates on own data)
+  not isSelfServeHandler(target) and
   // Exclude dependency, build artifact, and test code
   isUserContractCode(target.getLocation().getFile())
 select arm,

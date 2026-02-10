@@ -4,7 +4,7 @@ use cosmwasm_std::{
 };
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg};
-use crate::state::{Config, CONFIG};
+use crate::state::{Config, Proposal, ProposalStatus, CONFIG, BALANCES, PROPOSALS};
 
 #[entry_point]
 pub fn instantiate(
@@ -34,6 +34,12 @@ pub fn execute(
         }
         ExecuteMsg::Mint { amount, recipient } => {
             execute_mint(deps, env, info, amount, recipient)
+        }
+        ExecuteMsg::Withdraw { amount } => {
+            execute_withdraw(deps, env, info, amount)
+        }
+        ExecuteMsg::FinalizeProposal { proposal_id } => {
+            execute_finalize_proposal(deps, env, info, proposal_id)
         }
     }
 }
@@ -108,6 +114,37 @@ pub fn reply(
             Err(ContractError::Std(cosmwasm_std::StdError::generic_err(err)))
         }
     }
+}
+
+// Safe: self-serve — sender withdraws own balance (sender as storage write key)
+fn execute_withdraw(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    amount: Uint128,
+) -> Result<Response, ContractError> {
+    BALANCES.update(deps.storage, &info.sender, |bal| -> Result<_, ContractError> {
+        let balance = bal.unwrap_or_default();
+        Ok(balance.checked_sub(amount)
+            .map_err(|_| ContractError::Std(cosmwasm_std::StdError::generic_err("insufficient")))?)
+    })?;
+    Ok(Response::new())
+}
+
+// Safe: status gate — only finalize proposals that have passed
+fn execute_finalize_proposal(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    proposal_id: u64,
+) -> Result<Response, ContractError> {
+    let mut prop = PROPOSALS.load(deps.storage, proposal_id)?;
+    if prop.status != ProposalStatus::Passed {
+        return Err(ContractError::Std(cosmwasm_std::StdError::generic_err("wrong status")));
+    }
+    prop.status = ProposalStatus::Rejected;
+    PROPOSALS.save(deps.storage, proposal_id, &prop)?;
+    Ok(Response::new())
 }
 
 // Safe: SubMsg with reply — and reply handler exists above

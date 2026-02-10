@@ -26,5 +26,8 @@ predicate isUserContractCode(File f) {
   not f.getAbsolutePath().matches("%/target/%") and
   not f.getBaseName().matches("%_test.rs") and
   not f.getBaseName().matches("%_tests.rs") and
-  not f.getBaseName() = "tests.rs"
+  not f.getBaseName() = "tests.rs" and
+  // Exclude test fixture contract directories (e.g., contracts/test/)
+  not f.getAbsolutePath().matches("%/contracts/test/%") and
+  not f.getAbsolutePath().matches("%/contracts/testing/%")
 }

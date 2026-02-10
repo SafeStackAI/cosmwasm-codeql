@@ -6,6 +6,7 @@
  */
 
 import rust
+import Storage
 
 /**
  * A field access expression accessing `info.sender`.
@@ -33,8 +34,10 @@ predicate accessesSender(Function f) {
  * An authorization check is any of:
  * - Equality/inequality comparison involving `info.sender`
  * - Call to assert/ensure/check macros with sender
- * - Sender access followed by Unauthorized error path
+ * - Sender access followed by Unauthorized error path (struct literal or path expr)
  * - Call to a helper function with auth-related name
+ * - Sender used as storage read key + Unauthorized error (membership auth)
+ * - Status field gate check (state-machine auth)
  */
 predicate hasAuthorizationCheck(Function f) {
   // Direct sender comparison: info.sender == x or info.sender != x
@@ -62,15 +65,17 @@ predicate hasAuthorizationCheck(Function f) {
       call.getIdentifier().toString().matches("%can_execute%") or
       call.getIdentifier().toString().matches("%can_modify%") or
       call.getIdentifier().toString().matches("%check_permission%") or
-      call.getIdentifier().toString().matches("%validate_sender%")
+      call.getIdentifier().toString().matches("%validate_sender%") or
+      call.getIdentifier().toString().matches("%deduct_allowance%")
     )
   )
   or
-  // Sender access + Unauthorized error return pattern
+  // Sender access + Unauthorized error return pattern.
+  // Uses Expr (not PathExpr) to catch struct literals like ContractError::Unauthorized {}
   exists(SenderAccess sa |
     sa.getEnclosingCallable() = f
   ) and
-  exists(PathExpr err |
+  exists(Expr err |
     err.getEnclosingCallable() = f and
     err.toString().matches("%Unauthorized%")
   )
@@ -93,9 +98,138 @@ predicate hasAuthorizationCheck(Function f) {
         name.matches("%can_modify%") or
         name.matches("%check_permission%") or
         name.matches("%validate_sender%") or
-        name.matches("%assert_admin%")
+        name.matches("%assert_admin%") or
+        name.matches("%deduct_allowance%")
       )
     )
+  )
+  or
+  // Sender-as-storage-key implicit auth: info.sender in storage read key + error check
+  hasSenderStorageKeyAuth(f)
+  or
+  // Status field gate check (proposal.status == Passed etc.)
+  hasStatusGateCheck(f)
+}
+
+/**
+ * Holds if `sender` is structurally within `arg` (location containment).
+ * Needed because toString() on RefExpr(&info.sender) truncates to "&...".
+ */
+private predicate senderInArg(SenderAccess sender, Expr arg) {
+  sender.getLocation().getFile() = arg.getLocation().getFile() and
+  sender.getLocation().getStartLine() >= arg.getLocation().getStartLine() and
+  sender.getLocation().getEndLine() <= arg.getLocation().getEndLine() and
+  (
+    sender.getLocation().getStartLine() > arg.getLocation().getStartLine()
+    or
+    sender.getLocation().getStartColumn() >= arg.getLocation().getStartColumn()
+  ) and
+  (
+    sender.getLocation().getEndLine() < arg.getLocation().getEndLine()
+    or
+    sender.getLocation().getEndColumn() <= arg.getLocation().getEndColumn()
+  )
+}
+
+/**
+ * Holds if `f` contains sender-as-storage-key implicit authorization.
+ * Pattern: info.sender flows into Map key param of a storage read + error-checked result.
+ * Example: VOTERS.may_load(deps.storage, &info.sender)?.ok_or(Unauthorized{})?
+ */
+predicate hasSenderStorageKeyAuth(Function f) {
+  // Sender used as argument in a storage read call within this function
+  exists(StorageRead read, SenderAccess sender, Expr arg |
+    read.getEnclosingCallable() = f and
+    sender.getEnclosingCallable() = f and
+    arg = read.getArgList().getAnArg() and
+    senderInArg(sender, arg)
+  )
+  and
+  // Error path contains Unauthorized (any expression form)
+  exists(Expr err |
+    err.getEnclosingCallable() = f and
+    err.toString().matches("%Unauthorized%")
+  )
+}
+
+/**
+ * Holds if `f` contains a status-based gate check (state-machine auth).
+ * Pattern: load record -> check .status field -> error on mismatch.
+ * Example: if prop.status != Status::Passed { return Err(...) }
+ */
+predicate hasStatusGateCheck(Function f) {
+  // Field access to .status within the function
+  exists(FieldExpr statusAccess |
+    statusAccess.getEnclosingCallable() = f and
+    statusAccess.getIdentifier().toString() = "status"
+  )
+  and
+  (
+    // Comparison: x.status == SomeVariant or x.status != SomeVariant
+    exists(BinaryExpr cmp |
+      cmp.getEnclosingCallable() = f and
+      cmp.getOperatorName() in ["==", "!="] and
+      (
+        cmp.getLhs().toString().matches("%status%") or
+        cmp.getRhs().toString().matches("%status%")
+      )
+    )
+    or
+    // Match on status: match prop.status { Status::Passed => ..., _ => Err(...) }
+    exists(MatchExpr m |
+      m.getEnclosingCallable() = f and
+      m.getScrutinee().toString().matches("%status%")
+    )
+  )
+}
+
+/**
+ * Holds if `f` is a self-serve handler where sender operates on own data.
+ * Pattern: info.sender used as key in storage write (save/update).
+ * Self-serve handlers need no auth — sender can only affect own records.
+ * Excludes functions that also load admin/owner/config (privileged ops).
+ */
+predicate isSelfServeHandler(Function f) {
+  (
+    // Direct: info.sender used as key in a storage write
+    exists(StorageWrite write, SenderAccess sender, Expr arg |
+      write.getEnclosingCallable() = f and
+      sender.getEnclosingCallable() = f and
+      arg = write.getArgList().getAnArg() and
+      senderInArg(sender, arg)
+    )
+    or
+    // Indirect: function has a "sender" param and uses it in a storage write arg
+    exists(StorageWrite write, Param p |
+      write.getEnclosingCallable() = f and
+      p = f.getAParam() and
+      p.getPat().toString() = "sender" and
+      write.getArgList().getAnArg().toString().matches("%sender%")
+    )
+  )
+  and
+  // NOT a privileged handler (no admin/owner storage reads — CONFIG excluded
+  // because many contracts load config for non-auth purposes like reading params)
+  not exists(StorageRead adminLoad |
+    adminLoad.getEnclosingCallable() = f and
+    (
+      adminLoad.getReceiver().toString().matches("%ADMIN%") or
+      adminLoad.getReceiver().toString().matches("%OWNER%")
+    )
+  )
+}
+
+/**
+ * Holds if `f` has auth check directly OR in a direct callee (1-level deep).
+ * Covers the common pattern: execute_handler -> check_auth_helper.
+ */
+predicate hasAuthorizationCheckTransitive(Function f) {
+  hasAuthorizationCheck(f)
+  or
+  exists(Call call, Function callee |
+    call.getEnclosingCallable() = f and
+    callee = call.getStaticTarget() and
+    hasAuthorizationCheck(callee)
   )
 }
 

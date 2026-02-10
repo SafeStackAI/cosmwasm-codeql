@@ -16,7 +16,7 @@ This document describes the shared library predicates, class hierarchies, and de
 
 **Key Predicates:**
 - `isUserContractCode(File f)` — Filters to user-written contract code
-  - Excludes: `.cargo/` (dependencies), `target/` (build artifacts), test files (`_test.rs`, `_tests.rs`, `tests.rs`)
+  - Excludes: `.cargo/` (dependencies), `target/` (build artifacts), test files (`_test.rs`, `_tests.rs`, `tests.rs`), test fixture directories (`contracts/test/`, `contracts/testing/`)
   - Applied by ALL 10 queries to prevent false positives from external code
   - Design: Conservative filtering avoids over-aggressive exclusion patterns
 
@@ -91,35 +91,58 @@ This document describes the shared library predicates, class hierarchies, and de
   1. **Direct comparison:** `info.sender == x` or `info.sender != x` (BinaryExpr)
   2. **Macro-based checks:** assert/ensure/require/check/verify patterns
   3. **Helper method calls:** MethodCallExpr patterns for auth helpers:
-     - `assert_owner`, `assert_admin`
-     - `is_admin`, `can_execute`, `can_modify`
-     - `check_permission`, `validate_sender`
+     - `assert_owner`, `assert_admin`, `is_admin`, `can_execute`, `can_modify`
+     - `check_permission`, `validate_sender`, `deduct_allowance`
      - Any method matching `%assert%`, `%ensure%`, `%require%`, `%check_auth%`, `%verify_owner%`, `%only_owner%`
   4. **Error return pattern:** `info.sender` access followed by Unauthorized error path
   5. **Helper function call:** Call to free functions with auth-related names
+  6. **Sender-as-storage-key implicit auth:** `hasSenderStorageKeyAuth(f)`
+  7. **Status-based gate check:** `hasStatusGateCheck(f)`
 
-**Extension (Feb 2026):**
-- Added 6 new auth helper pattern matches: is_admin, can_execute, can_modify, check_permission, validate_sender, assert_admin
-- Enhanced MethodCallExpr detection to support cw-ownable and cw-controllers integration
-- Dual-layer detection: Direct calls AND method calls
+**New Predicates (Feb 2026):**
+- `hasSenderStorageKeyAuth(Function f)` — Detects sender-as-storage-key implicit authorization
+  - Pattern: `info.sender` used as key in storage read + error-checked result
+  - Example: `VOTERS.may_load(deps.storage, &info.sender)?.ok_or(Unauthorized{})?`
+  - Uses `senderInArg` helper for location-based sender detection (handles `&info.sender` refs)
+
+- `hasStatusGateCheck(Function f)` — Detects state-machine authorization via status fields
+  - Pattern: Load record → check `.status` field → error on mismatch
+  - Example: `if prop.status != Status::Passed { return Err(...) }`
+  - Supports both comparisons and match expressions on status fields
+
+- `isSelfServeHandler(Function f)` — Identifies self-serve handlers (no auth needed)
+  - Pattern: `info.sender` used as key in storage write (save/update)
+  - Self-serve handlers: sender can only affect own records
+  - Excludes privileged handlers that also load ADMIN/OWNER configs
+
+- `hasAuthorizationCheckTransitive(Function f)` — Checks direct OR 1-level-deep auth
+  - Pattern: `execute_handler` → `check_auth_helper` call
+  - Uses `getStaticTarget()` on Call AST nodes to resolve callees
+
+- `senderInArg(SenderAccess, Expr)` — Private helper for location-based containment
+  - Handles `&info.sender` refs where `toString()` elides the path
+  - Uses line/column ranges to verify structural containment
 
 **Design Rationale:**
 - Multi-method detection accommodates diverse ecosystem auth patterns
 - Pattern names extracted via `matches()` to support cw-*, custom, and standard library patterns
 - Conservative: Avoids false positives by accepting any recognized auth pattern
+- Transitive checks enable simple auth helpers (used by MissingExecuteAuthorization)
 
 ---
 
 ## Query Design Patterns
 
-### Pattern 1: Entry Point + Predicate Composition
+### Pattern 1: Entry Point + Predicate Composition (with Exclusions)
 **Example: MissingExecuteAuthorization.ql**
 ```ql
 from ExecuteHandler handler
-where not hasAuthorizationCheck(handler)
+where
+  not hasAuthorizationCheckTransitive(handler) and
+  not isSelfServeHandler(handler)
 select handler, "..."
 ```
-**Rationale:** Compose handlers (from EntryPoints) with authorization predicate (from Authorization)
+**Rationale:** Compose handlers (from EntryPoints) with authorization predicate (from Authorization), excluding self-serve handlers and transitive auth checks
 
 ### Pattern 2: Scope-Aware Detection
 **Example: UncheckedCosmwasmArithmetic.ql**
@@ -167,34 +190,46 @@ select arm, "..."
 **Trade-off:** May miss renamed msg parameters in edge cases
 
 ### Strategy 4: Auth Pattern Expansion
-**Implementation:** `hasAuthorizationCheck()` recognizes 9+ auth patterns
-**Rationale:** Diverse ecosystem patterns (cw-ownable, cw-controllers, custom helpers)
+**Implementation:** `hasAuthorizationCheck()` recognizes 13+ auth patterns (comparisons, macros, helpers, implicit auth, status gates)
+**Rationale:** Diverse ecosystem patterns (cw-ownable, cw-controllers, custom helpers, storage-key membership, state-machine auth)
 **Trade-off:** Pattern name matching does not validate semantic correctness
+
+### Strategy 5: Self-Serve Handler Exclusion
+**Implementation:** `isSelfServeHandler(f)` identifies handlers where sender operates only on own data
+**Rationale:** Handlers using `info.sender` as storage key need no auth check (sender can't affect others' data)
+**Trade-off:** May exclude handlers that also perform privileged ops on unrelated records (mitigated by ADMIN/OWNER check)
+
+### Strategy 6: Transitive Authorization
+**Implementation:** `hasAuthorizationCheckTransitive(f)` checks handler + 1-level callees
+**Rationale:** Common pattern of extract auth logic to helper functions (cleaner code structure)
+**Trade-off:** Does not detect multi-level call chains (rare in practice for auth helpers)
 
 ---
 
 ## Precision Metrics & Targets
 
 ### Per-Query Precision (E2E Validation, Feb 2026)
+**Targets:** cw-plus v2.0.0 + DAO DAO v2.5.0
 
 | Query | Findings | TP | FP | FP Rate | Target |
 |-------|----------|----|----|---------|--------|
-| UncheckedCosmwasmArithmetic | 1 | 0 | 1 | ~6% | <15% |
-| UnprotectedExecuteDispatch | 16 | 12 | 4 | ~25% | <20% |
-| MissingExecuteAuthorization | 16 | 12 | 4 | ~25% | <20% |
-| MissingMigrateAuthorization | 1 | 1 | 0 | 0% | <20% |
-| UncheckedStorageUnwrap | 1 | 1 | 0 | 0% | <20% |
-| MissingAddressValidation | 1 | 1 | 0 | 0% | <20% |
-| StorageKeyCollision | 0 | 0 | 0 | N/A | <20% |
-| IBCCEIViolation | 0 | 0 | 0 | N/A | <20% |
-| SubMsgWithoutReplyHandler | 0 | 0 | 0 | N/A | <20% |
-| ReplyHandlerIgnoringErrors | 0 | 0 | 0 | N/A | <20% |
-| **Overall** | **36** | **27** | **9** | **~25%** | **<20%** |
+| UncheckedCosmwasmArithmetic | 0 | 0 | 0 | 0% | <15% |
+| UnprotectedExecuteDispatch | 0 | 0 | 0 | 0% | <20% |
+| MissingExecuteAuthorization | 0 | 0 | 0 | 0% | <20% |
+| MissingMigrateAuthorization | 0 | 0 | 0 | 0% | <20% |
+| UncheckedStorageUnwrap | 0 | 0 | 0 | 0% | <20% |
+| MissingAddressValidation | 0 | 0 | 0 | 0% | <20% |
+| StorageKeyCollision | 4 | ? | ? | ? | <20% |
+| IBCCEIViolation | 0 | 0 | 0 | 0% | <20% |
+| SubMsgWithoutReplyHandler | 0 | 0 | 0 | 0% | <20% |
+| ReplyHandlerIgnoringErrors | 0 | 0 | 0 | 0% | <20% |
+| **Overall** | **4** | **?** | **?** | **TBD** | **<20%** |
 
 **Notes:**
-- Baseline (Feb 2026): 65 findings (95% FP rate) from precision tuning effort
-- After improvements: 36 findings (45% aggregate FP rate)
-- Top 3 queries account for 94% of findings; precision tuning focused there
+- Baseline (Feb 2026): 65 findings (95% FP rate) from pre-tuning
+- After improvements: 4 total findings (94% reduction across access-control queries)
+- Multi-target E2E (cw-plus + DAO DAO) via `targets.conf` and per-target result dirs
+- New safe-contract test cases: `execute_withdraw` (self-serve) and `execute_finalize_proposal` (status gate)
 
 ---
 

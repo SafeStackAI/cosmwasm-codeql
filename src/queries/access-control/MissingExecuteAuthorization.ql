@@ -25,8 +25,10 @@ where
       call.getStaticTarget() = handler
     )
   ) and
-  // handler lacks authorization check
-  not hasAuthorizationCheck(handler) and
+  // handler lacks authorization check (including 1-level transitive callees)
+  not hasAuthorizationCheckTransitive(handler) and
+  // exclude self-serve handlers (sender operates on own data)
+  not isSelfServeHandler(handler) and
   // exclude query-only handlers (no DepsMut)
   not handler instanceof QueryHandler and
   // exclude dependency, build artifact, and test code

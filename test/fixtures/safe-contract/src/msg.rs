@@ -10,6 +10,8 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     UpdateConfig { new_admin: String },
     Mint { amount: Uint128, recipient: String },
+    Withdraw { amount: Uint128 },
+    FinalizeProposal { proposal_id: u64 },
 }
 
 #[cw_serde]
