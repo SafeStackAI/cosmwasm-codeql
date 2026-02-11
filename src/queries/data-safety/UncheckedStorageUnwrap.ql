@@ -17,7 +17,8 @@ from MethodCallExpr unwrapCall, StorageRead storageRead
 where
   unwrapCall.getIdentifier().toString() = "unwrap" and
   unwrapCall.getReceiver() = storageRead and
-  isUserContractCode(unwrapCall.getLocation().getFile())
+  isUserContractCode(unwrapCall.getLocation().getFile()) and
+  not isInTestModule(unwrapCall)
 select unwrapCall,
   "Unchecked .unwrap() on storage read '" + storageRead.getMethodName() +
     "()'. Handle the error case explicitly with '?' operator."

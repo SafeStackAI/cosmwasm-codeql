@@ -34,7 +34,10 @@ where
   decl1.getLocation().getFile() = decl2.getLocation().getFile() and
   // Avoid duplicate reports (only report once per pair)
   decl1.getLocation().getStartLine() < decl2.getLocation().getStartLine() and
-  isUserContractCode(decl1.getLocation().getFile())
+  isUserContractCode(decl1.getLocation().getFile()) and
+  // Exclude declarations inside #[cfg(test)] modules
+  not isInTestModule(decl1) and
+  not isInTestModule(decl2)
 select decl1,
   "Storage key " + key + " is also used by another declaration at line " +
     decl2.getLocation().getStartLine().toString() + ". This causes state corruption."

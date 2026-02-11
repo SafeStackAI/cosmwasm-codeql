@@ -32,7 +32,8 @@ where
   // exclude query-only handlers (no DepsMut)
   not handler instanceof QueryHandler and
   // exclude dependency, build artifact, and test code
-  isUserContractCode(handler.getLocation().getFile())
+  isUserContractCode(handler.getLocation().getFile()) and
+  not isInTestModule(handler)
 select handler,
   "Execute handler '" + handler.getName().getText() +
     "' modifies state without authorization check."

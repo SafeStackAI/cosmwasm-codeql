@@ -19,15 +19,33 @@ import Authorization
  * Excludes:
  * - `.cargo/` (registry dependencies)
  * - `target/` (build output)
- * - Rust test modules (tests.rs, _test.rs, _tests.rs patterns)
+ * - Rust test files and directories
  */
 predicate isUserContractCode(File f) {
   not f.getAbsolutePath().matches("%/.cargo/%") and
   not f.getAbsolutePath().matches("%/target/%") and
+  // Test file basenames
   not f.getBaseName().matches("%_test.rs") and
   not f.getBaseName().matches("%_tests.rs") and
   not f.getBaseName() = "tests.rs" and
-  // Exclude test fixture contract directories (e.g., contracts/test/)
+  not f.getBaseName().matches("test_%.rs") and
+  // Test directories
   not f.getAbsolutePath().matches("%/contracts/test/%") and
-  not f.getAbsolutePath().matches("%/contracts/testing/%")
+  not f.getAbsolutePath().matches("%/contracts/testing/%") and
+  not f.getAbsolutePath().matches("%/testing/%") and
+  not f.getAbsolutePath().matches("%/tests/%") and
+  not f.getAbsolutePath().matches("%/test_tube/%")
+}
+
+/**
+ * Holds if `item` is inside a Rust test module (mod tests { ... }).
+ * Catches `#[cfg(test)]` modules by conventional name.
+ */
+predicate isInTestModule(Locatable item) {
+  exists(Module m |
+    (m.getName().getText() = "tests" or m.getName().getText() = "test") and
+    item.getLocation().getFile() = m.getLocation().getFile() and
+    item.getLocation().getStartLine() >= m.getLocation().getStartLine() and
+    item.getLocation().getEndLine() <= m.getLocation().getEndLine()
+  )
 }

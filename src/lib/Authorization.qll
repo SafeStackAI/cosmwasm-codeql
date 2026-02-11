@@ -109,6 +109,13 @@ predicate hasAuthorizationCheck(Function f) {
   or
   // Status field gate check (proposal.status == Passed etc.)
   hasStatusGateCheck(f)
+  or
+  // Parameter-passing auth: dispatch passes info.sender as "sender" param,
+  // handler compares it against something + returns Unauthorized
+  hasParamBasedAuth(f)
+  or
+  // Voting power / membership gate: function checks caller's voting power or permission
+  hasVotingPowerAuth(f)
 }
 
 /**
@@ -230,6 +237,45 @@ predicate hasAuthorizationCheckTransitive(Function f) {
     call.getEnclosingCallable() = f and
     callee = call.getStaticTarget() and
     hasAuthorizationCheck(callee)
+  )
+}
+
+/**
+ * Holds if `f` has parameter-based authorization.
+ * Pattern: dispatch extracts info.sender and passes as "sender" Addr param;
+ * handler compares it or uses it in an auth-returning path.
+ * Example: execute_pause(deps, env, sender: Addr, ...) { if sender != X { Unauthorized } }
+ */
+predicate hasParamBasedAuth(Function f) {
+  exists(Param p |
+    p = f.getAParam() and
+    p.getPat().toString() = "sender"
+  ) and
+  exists(Expr err |
+    err.getEnclosingCallable() = f and
+    err.toString().matches("%Unauthorized%")
+  )
+}
+
+/**
+ * Holds if `f` gates on voting power or membership permission.
+ * Pattern: call to get_voting_power/is_permitted + zero/denial check.
+ * Example: let power = get_voting_power(sender)?; if power.is_zero() { ... }
+ */
+predicate hasVotingPowerAuth(Function f) {
+  // Free function call to voting power lookup
+  exists(CallExpr call |
+    call.getEnclosingCallable() = f and
+    call.getFunction().toString().matches("%voting_power%")
+  )
+  or
+  // Method call to permission check (is_permitted, has_voting_power)
+  exists(MethodCallExpr call |
+    call.getEnclosingCallable() = f and
+    (
+      call.getIdentifier().toString().matches("%is_permitted%") or
+      call.getIdentifier().toString().matches("%voting_power%")
+    )
   )
 }
 

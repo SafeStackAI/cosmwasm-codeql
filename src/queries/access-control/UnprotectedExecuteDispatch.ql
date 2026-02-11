@@ -29,7 +29,8 @@ where
   // Exclude self-serve handlers (sender operates on own data)
   not isSelfServeHandler(target) and
   // Exclude dependency, build artifact, and test code
-  isUserContractCode(target.getLocation().getFile())
+  isUserContractCode(target.getLocation().getFile()) and
+  not isInTestModule(target)
 select arm,
   "Dispatch arm calls '" + target.getName().getText() +
     "' which modifies state without authorization."

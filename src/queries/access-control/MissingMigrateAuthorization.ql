@@ -16,6 +16,7 @@ import src.lib.CosmWasm
 from MigrateHandler migrate
 where
   not hasAuthorizationCheck(migrate) and
-  isUserContractCode(migrate.getLocation().getFile())
+  isUserContractCode(migrate.getLocation().getFile()) and
+  not isInTestModule(migrate)
 select migrate,
   "Migrate handler lacks admin authorization check. Unauthorized migration enables full contract takeover."
